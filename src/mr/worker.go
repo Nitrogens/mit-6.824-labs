@@ -56,6 +56,7 @@ func Worker(mapf func(string, string) []KeyValue,
 				}
 				content, err := ioutil.ReadAll(file)
 				if err != nil {
+					_ = file.Close()
 					log.Fatalf("[Worker] Read from file failed: %v | %v | %v", err, fileName, resp.TaskInfo)
 				}
 				_ = file.Close()
@@ -80,12 +81,13 @@ func Worker(mapf func(string, string) []KeyValue,
 				for _, kv := range reduceKVsMap[idx] {
 					err := enc.Encode(&kv)
 					if err != nil {
+						_ = file.Close()
 						log.Fatalf("[Worker] Encode failed: %v | %v | %v | %v | %v", err, fileName, resp.TaskInfo, idx, kv)
 					}
 				}
+				_ = file.Close()
 			}
 		} else if resp.TaskInfo.Type == kReduceTask {
-
 		}
 	}
 
