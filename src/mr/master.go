@@ -36,6 +36,8 @@ type Master struct {
 	reduceTaskList          []Task
 	isMapTaskFinished       []bool
 	isReduceTaskFinished    []bool
+	isMapTaskAssigned       []bool
+	isReduceTaskAssigned    []bool
 	mapTaskChan             chan Task
 	reduceTaskChan          chan Task
 	totalMapTaskCount       int
@@ -56,11 +58,37 @@ type Task struct {
 
 // Your code here -- RPC handlers for the worker to call.
 func (m *Master) GetTask(req *GetTaskReq, resp *GetTaskResp) error {
+	log.Println("[GetTask] start")
 	var taskInfo Task
-	resp = &GetTaskResp{}
 	resp.TotalReduceTaskCount = m.totalReduceTaskCount
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	for idx, mapTask := range m.mapTaskList {
+		if m.isMapTaskFinished[idx] {
+			continue
+		}
+		log.Println("[MapTaskReset]", idx, mapTask)
+		timeDelta := time.Since(mapTask.AssignedTime)
+		if timeDelta >= kTimeThreshold && m.isMapTaskAssigned[idx] {
+			m.assignedMapTaskCount--
+			m.isMapTaskAssigned[idx] = false
+			m.mapTaskList[idx].AssignedTime = time.Time{}
+			m.mapTaskChan <- m.mapTaskList[idx]
+		}
+	}
+	for idx, reduceTask := range m.reduceTaskList {
+		if m.isReduceTaskFinished[idx] {
+			continue
+		}
+		log.Println("[ReduceTaskReset]", idx, reduceTask)
+		timeDelta := time.Since(reduceTask.AssignedTime)
+		if timeDelta >= kTimeThreshold && m.isReduceTaskAssigned[idx] {
+			m.assignedReduceTaskCount--
+			m.isReduceTaskAssigned[idx] = false
+			m.reduceTaskList[idx].AssignedTime = time.Time{}
+			m.reduceTaskChan <- m.reduceTaskList[idx]
+		}
+	}
 	if m.assignedMapTaskCount < m.totalMapTaskCount {
 		m.assignedMapTaskCount++
 		taskInfo = <-m.mapTaskChan
@@ -85,13 +113,21 @@ func (m *Master) GetTask(req *GetTaskReq, resp *GetTaskResp) error {
 		}
 	}
 	taskInfo.AssignedTime = time.Now()
+	if taskInfo.Type == kMapTask {
+		m.mapTaskList[taskInfo.ID].AssignedTime = taskInfo.AssignedTime
+		m.isMapTaskAssigned[taskInfo.ID] = true
+	} else if taskInfo.Type == kReduceTask {
+		m.reduceTaskList[taskInfo.ID].AssignedTime = taskInfo.AssignedTime
+		m.isReduceTaskFinished[taskInfo.ID] = true
+	}
 	resp.StatusCode = kStatusCodeOK
 	resp.TaskInfo = taskInfo
+	log.Printf("[GetTask] end: %+v", resp)
 	return nil
 }
 
 func (m *Master) SetTaskFinished(req *SetTaskFinishedReq, resp *SetTaskFinishedResp) error {
-	resp = &SetTaskFinishedResp{}
+	log.Printf("[SetTaskFinished] start: %+v", req)
 	resp.StatusCode = kStatusCodeOK
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -103,7 +139,7 @@ func (m *Master) SetTaskFinished(req *SetTaskFinishedReq, resp *SetTaskFinishedR
 				task := Task{
 					ID:        idxReduceTask,
 					Type:      kReduceTask,
-					FileNames: make([]string, m.totalMapTaskCount),
+					FileNames: make([]string, 0, m.totalMapTaskCount),
 				}
 				for idxMapTask := 0; idxMapTask < m.totalMapTaskCount; idxMapTask++ {
 					task.FileNames = append(task.FileNames, fmt.Sprintf("mr-%v-%v", idxMapTask, idxReduceTask))
@@ -122,6 +158,7 @@ func (m *Master) SetTaskFinished(req *SetTaskFinishedReq, resp *SetTaskFinishedR
 		}
 		m.isReduceTaskFinished[req.TaskInfo.ID] = true
 	}
+	log.Printf("[SetTaskFinished] end: %+v | %+v", req, resp)
 	return nil
 }
 
@@ -159,30 +196,10 @@ func (m *Master) Done() bool {
 	ret := false
 
 	// Your code here.
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	if m.finishedReduceTaskCount == m.totalReduceTaskCount {
 		ret = true
-	} else {
-		if m.finishedMapTaskCount < m.totalMapTaskCount {
-			for idx, mapTask := range m.mapTaskList {
-				timeDelta := time.Since(mapTask.AssignedTime)
-				if timeDelta >= kTimeThreshold {
-					m.assignedMapTaskCount--
-					m.mapTaskList[idx].AssignedTime = time.Now()
-					m.mapTaskChan <- m.mapTaskList[idx]
-				}
-			}
-		} else {
-			for idx, reduceTask := range m.reduceTaskList {
-				timeDelta := time.Since(reduceTask.AssignedTime)
-				if timeDelta >= kTimeThreshold {
-					m.assignedReduceTaskCount--
-					m.reduceTaskList[idx].AssignedTime = time.Now()
-					m.reduceTaskChan <- m.mapTaskList[idx]
-				}
-			}
-		}
 	}
 
 	return ret
@@ -199,12 +216,17 @@ func MakeMaster(files []string, nReduce int) *Master {
 	// Your code here.
 	m.totalMapTaskCount = len(files)
 	m.totalReduceTaskCount = nReduce
+	m.mapTaskChan = make(chan Task, m.totalMapTaskCount)
+	m.reduceTaskChan = make(chan Task, m.totalReduceTaskCount)
 	m.mapTaskList = make([]Task, 0, m.totalMapTaskCount)
 	m.reduceTaskList = make([]Task, 0, m.totalReduceTaskCount)
+	m.isMapTaskAssigned = make([]bool, m.totalMapTaskCount)
+	m.isReduceTaskAssigned = make([]bool, m.totalReduceTaskCount)
 	m.isMapTaskFinished = make([]bool, m.totalMapTaskCount)
 	m.isReduceTaskFinished = make([]bool, m.totalReduceTaskCount)
 
 	for idx, fileName := range files {
+		log.Println(idx, fileName)
 		task := Task{
 			ID:        idx,
 			Type:      kMapTask,

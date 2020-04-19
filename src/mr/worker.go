@@ -3,14 +3,14 @@ package mr
 import (
 	"encoding/json"
 	"fmt"
+	"hash/fnv"
 	"io/ioutil"
+	"log"
+	"net/rpc"
 	"os"
 	"sort"
 	"time"
 )
-import "log"
-import "net/rpc"
-import "hash/fnv"
 
 //
 // Map functions return a slice of KeyValue.
@@ -44,6 +44,7 @@ func Worker(mapf func(string, string) []KeyValue,
 		if result == false || resp.StatusCode == kStatusCodeFinish {
 			break
 		}
+		log.Println(resp)
 		if resp.StatusCode == kStatusCodeNoTask {
 			time.Sleep(time.Second)
 			continue
@@ -74,7 +75,7 @@ func Worker(mapf func(string, string) []KeyValue,
 			}
 			for idx := 0; idx < resp.TotalReduceTaskCount; idx++ {
 				fileName := fmt.Sprintf("mr-%v-%v", resp.TaskInfo.ID, idx)
-				file, err := os.Open(fileName)
+				file, err := os.Create(fileName)
 				if err != nil {
 					log.Fatalf("[Worker] OpenFile failed: %v | %v | %v", err, fileName, resp.TaskInfo)
 				}
