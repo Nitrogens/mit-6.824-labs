@@ -55,7 +55,7 @@ type Task struct {
 }
 
 // Your code here -- RPC handlers for the worker to call.
-func (m *Master) GetTask(resp *GetTaskResp) error {
+func (m *Master) GetTask(req *GetTaskReq, resp *GetTaskResp) error {
 	var taskInfo Task
 	resp = &GetTaskResp{}
 	m.mu.Lock()
