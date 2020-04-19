@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"sort"
 	"time"
 )
 import "log"
@@ -47,8 +48,8 @@ func Worker(mapf func(string, string) []KeyValue,
 			time.Sleep(time.Second)
 			continue
 		}
+		kvs := make([]KeyValue, 0)
 		if resp.TaskInfo.Type == kMapTask {
-			kvs := make([]KeyValue, 0)
 			for _, fileName := range resp.TaskInfo.FileNames {
 				file, err := os.Open(fileName)
 				if err != nil {
@@ -88,7 +89,49 @@ func Worker(mapf func(string, string) []KeyValue,
 				_ = file.Close()
 			}
 		} else if resp.TaskInfo.Type == kReduceTask {
+			for _, fileName := range resp.TaskInfo.FileNames {
+				file, err := os.Open(fileName)
+				if err != nil {
+					log.Fatalf("[Worker] OpenFile failed: %v | %v | %v", err, fileName, resp.TaskInfo)
+				}
+				dec := json.NewDecoder(file)
+				for {
+					var kv KeyValue
+					if err := dec.Decode(&kv); err != nil {
+						break
+					}
+					kvs = append(kvs, kv)
+				}
+			}
+			sort.Slice(kvs, func(i, j int) bool {
+				return kvs[i].Key < kvs[j].Key
+			})
+			outputFileName := fmt.Sprintf("mr-out-%v", resp.TaskInfo.ID)
+			outputFile, err := os.Create(outputFileName)
+			if err != nil {
+				log.Fatalf("[Worker] OpenFile failed: %v | %v | %v", err, outputFileName, resp.TaskInfo)
+			}
+			i := 0
+			for i < len(kvs) {
+				j := i + 1
+				for j < len(kvs) && kvs[j].Key == kvs[i].Key {
+					j++
+				}
+				values := make([]string, 0, j-i)
+				for k := i; k < j; k++ {
+					values = append(values, kvs[k].Value)
+				}
+				output := reducef(kvs[i].Key, values)
+				_, _ = fmt.Fprintf(outputFile, "%v %v\n", kvs[i].Key, output)
+				i = j
+			}
+			_ = outputFile.Close()
 		}
+		setTaskFinishedReq := &SetTaskFinishedReq{
+			TaskInfo: resp.TaskInfo,
+		}
+		setTaskFinishedResp := &SetTaskFinishedResp{}
+		_ = call("Master.SetTaskFinished", setTaskFinishedReq, setTaskFinishedResp)
 	}
 
 	// uncomment to send the Example RPC to the master.
