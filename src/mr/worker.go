@@ -1,10 +1,15 @@
 package mr
 
-import "fmt"
+import (
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
+	"os"
+	"time"
+)
 import "log"
 import "net/rpc"
 import "hash/fnv"
-
 
 //
 // Map functions return a slice of KeyValue.
@@ -24,7 +29,6 @@ func ihash(key string) int {
 	return int(h.Sum32() & 0x7fffffff)
 }
 
-
 //
 // main/mrworker.go calls this function.
 //
@@ -32,6 +36,58 @@ func Worker(mapf func(string, string) []KeyValue,
 	reducef func(string, []string) string) {
 
 	// Your worker implementation here.
+	for {
+		req := &GetTaskReq{}
+		resp := &GetTaskResp{}
+		result := call("Master.GetTask", req, resp)
+		if result == false || resp.StatusCode == kStatusCodeFinish {
+			break
+		}
+		if resp.StatusCode == kStatusCodeNoTask {
+			time.Sleep(time.Second)
+			continue
+		}
+		if resp.TaskInfo.Type == kMapTask {
+			kvs := make([]KeyValue, 0)
+			for _, fileName := range resp.TaskInfo.FileNames {
+				file, err := os.Open(fileName)
+				if err != nil {
+					log.Fatalf("[Worker] OpenFile failed: %v | %v | %v", err, fileName, resp.TaskInfo)
+				}
+				content, err := ioutil.ReadAll(file)
+				if err != nil {
+					log.Fatalf("[Worker] Read from file failed: %v | %v | %v", err, fileName, resp.TaskInfo)
+				}
+				_ = file.Close()
+				kvsFromFile := mapf(fileName, string(content))
+				kvs = append(kvs, kvsFromFile...)
+			}
+			reduceKVsMap := make(map[int][]KeyValue)
+			for idx := 0; idx < resp.TotalReduceTaskCount; idx++ {
+				reduceKVsMap[idx] = make([]KeyValue, 0)
+			}
+			for _, kv := range kvs {
+				idx := ihash(kv.Key) % resp.TotalReduceTaskCount
+				reduceKVsMap[idx] = append(reduceKVsMap[idx], kv)
+			}
+			for idx := 0; idx < resp.TotalReduceTaskCount; idx++ {
+				fileName := fmt.Sprintf("mr-%v-%v", resp.TaskInfo.ID, idx)
+				file, err := os.Open(fileName)
+				if err != nil {
+					log.Fatalf("[Worker] OpenFile failed: %v | %v | %v", err, fileName, resp.TaskInfo)
+				}
+				enc := json.NewEncoder(file)
+				for _, kv := range reduceKVsMap[idx] {
+					err := enc.Encode(&kv)
+					if err != nil {
+						log.Fatalf("[Worker] Encode failed: %v | %v | %v | %v | %v", err, fileName, resp.TaskInfo, idx, kv)
+					}
+				}
+			}
+		} else if resp.TaskInfo.Type == kReduceTask {
+
+		}
+	}
 
 	// uncomment to send the Example RPC to the master.
 	// CallExample()

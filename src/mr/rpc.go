@@ -23,11 +23,12 @@ type ExampleReply struct {
 }
 
 // Add your RPC definitions here.
-type GetTaskReq struct {}
+type GetTaskReq struct{}
 
 type GetTaskResp struct {
-	StatusCode StatusType
-	TaskInfo   Task
+	StatusCode           StatusType
+	TaskInfo             Task
+	TotalReduceTaskCount int
 }
 
 type SetTaskFinishedReq struct {

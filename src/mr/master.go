@@ -58,6 +58,7 @@ type Task struct {
 func (m *Master) GetTask(req *GetTaskReq, resp *GetTaskResp) error {
 	var taskInfo Task
 	resp = &GetTaskResp{}
+	resp.TotalReduceTaskCount = m.totalReduceTaskCount
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.assignedMapTaskCount < m.totalMapTaskCount {
