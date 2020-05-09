@@ -25,9 +25,9 @@ import "../labrpc"
 // import "../labgob"
 
 const (
-	kServerStateFollower = 0
-	kServerStateCandidate
-	kServerStateLeader
+	kServerStateFollower = "follower"
+	kServerStateCandidate = "candidate"
+	kServerStateLeader = "leader"
 )
 
 //
@@ -61,8 +61,6 @@ type Raft struct {
 	// Look at the paper's Figure 2 for a description of what
 	// state a Raft server must maintain.
 
-	state int
-
 	// Persistent state on all servers
 	currentTerm int
 	votedFor    int
@@ -84,8 +82,10 @@ func (rf *Raft) GetState() (int, bool) {
 	var isLeader bool
 
 	// Your code here (2A).
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
 	term = rf.currentTerm
-	isLeader = rf.state == kServerStateLeader
+	isLeader = string(rf.persister.ReadRaftState()) == kServerStateLeader
 
 	return term, isLeader
 }
@@ -153,6 +153,8 @@ type RequestVoteReply struct {
 //
 func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	// Your code here (2A, 2B).
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
 	if args.term < rf.currentTerm {
 		reply.voteGranted = false
 	} else if args.term == rf.currentTerm {
@@ -166,7 +168,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	} else {
 		rf.currentTerm = args.term
 		rf.votedFor = args.candidateId
-		rf.state = kServerStateCandidate
+		rf.persister.SaveRaftState([]byte(kServerStateCandidate))
 		reply.voteGranted = true
 	}
 	reply.term = rf.currentTerm
@@ -217,6 +219,8 @@ type AppendEntriesReply struct {
 }
 
 func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
 	if args.term < rf.currentTerm {
 		reply.success = false
 	} else {
@@ -224,7 +228,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 			rf.currentTerm = args.term
 			rf.votedFor = -1
 		}
-		rf.state = kServerStateFollower
+		rf.persister.SaveRaftState([]byte(kServerStateFollower))
 		reply.success = true
 	}
 	reply.term = rf.currentTerm
@@ -254,7 +258,11 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 
 	// Your code here (2B).
 
-	return index, rf.currentTerm, rf.state == kServerStateLeader
+	return index, rf.currentTerm, string(rf.persister.ReadRaftState()) == kServerStateLeader
+}
+
+func (rf *Raft) Work() {
+
 }
 
 //
@@ -301,10 +309,13 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	// For Lab 2A
 	rf.currentTerm = 0
 	rf.votedFor = -1
-	rf.state = kServerStateFollower
+	rf.persister.SaveRaftState([]byte(kServerStateFollower))
 
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
+
+	// Start working
+	go rf.Work()
 
 	return rf
 }
