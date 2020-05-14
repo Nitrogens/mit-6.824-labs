@@ -72,6 +72,12 @@ type ApplyMsg struct {
 	CommandIndex int
 }
 
+type LogEntry struct {
+	id      int
+	term    int
+	command interface{}
+}
+
 //
 // A Go object implementing a single Raft peer.
 //
@@ -89,7 +95,7 @@ type Raft struct {
 	// Persistent state on all servers
 	currentTerm int
 	votedFor    int
-	log         []string
+	log         []*LogEntry
 	votesCount  int
 	timeLimit   time.Duration
 
@@ -179,8 +185,10 @@ func (rf *Raft) timeReset() {
 //
 type RequestVoteArgs struct {
 	// Your data here (2A, 2B).
-	Term        int
-	CandidateId int
+	Term         int
+	CandidateId  int
+	LastLogIndex int
+	LastLogTerm  int
 }
 
 //
@@ -253,8 +261,12 @@ func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *Reques
 }
 
 type AppendEntriesArgs struct {
-	Term     int
-	LeaderId int
+	Term         int
+	LeaderId     int
+	PrevLogIndex int
+	PrevLogTerm  int
+	Entries      []*LogEntry
+	leaderCommit int
 }
 
 type AppendEntriesReply struct {
@@ -458,6 +470,14 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.persister.SaveRaftState([]byte(kServerStateFollower))
 	rf.timeReset()
 	rf.doneChan = make(chan bool, 1)
+
+	// For Lab 2B
+	rf.commitIndex = 0
+	rf.lastApplied = 0
+	for i := 0; i < len(peers); i++ {
+		rf.nextIndex[i] = 1
+		rf.matchIndex[i] = 0
+	}
 
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
