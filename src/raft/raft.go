@@ -21,6 +21,7 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"sort"
 	"sync"
 	"time"
 )
@@ -73,7 +74,7 @@ type ApplyMsg struct {
 }
 
 type LogEntry struct {
-	id      int
+	idx     int
 	term    int
 	command interface{}
 }
@@ -276,18 +277,58 @@ type AppendEntriesReply struct {
 
 func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
 	rf.mu.Lock()
-	defer rf.mu.Unlock()
+	defer func() {
+		reply.Term = rf.currentTerm
+		rf.mu.Unlock()
+	}()
 	if args.Term < rf.currentTerm {
 		reply.Success = false
 	} else {
+		if args.PrevLogIndex < len(rf.log) {
+			if rf.log[args.PrevLogIndex].term != args.PrevLogTerm {
+				reply.Success = false
+				return
+			}
+		} else {
+			reply.Success = false
+			return
+		}
+		reply.Success = true
+		minIdx := 0x3f3f3f3f3f3f3f3f
+		for idx, logEntry := range args.Entries {
+			if idx < len(rf.log) && rf.log[idx].term != logEntry.term {
+				reply.Success = false
+				if idx < minIdx {
+					minIdx = idx
+				}
+			}
+		}
+		if !reply.Success {
+			rf.log = rf.log[:minIdx]
+			return
+		}
+		sort.Slice(args.Entries, func(i, j int) bool {
+			return args.Entries[i].idx < args.Entries[i].idx
+		})
+		rf.log = append(rf.log, args.Entries...)
+		for idx, logEntry := range args.Entries {
+			if idx < len(rf.log) && rf.log[idx].term != logEntry.term {
+				reply.Success = false
+			}
+		}
+		if args.leaderCommit > rf.commitIndex {
+			if len(rf.log)-1 < args.leaderCommit {
+				rf.commitIndex = len(rf.log) - 1
+			} else {
+				rf.commitIndex = args.leaderCommit
+			}
+		}
 		if args.Term > rf.currentTerm {
 			rf.getIntoNewTerm(args.Term)
 		}
 		rf.persister.SaveRaftState([]byte(kServerStateFollower))
 		rf.timeReset()
-		reply.Success = true
 	}
-	reply.Term = rf.currentTerm
 }
 
 func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *AppendEntriesReply) bool {
@@ -478,6 +519,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 		rf.nextIndex[i] = 1
 		rf.matchIndex[i] = 0
 	}
+	rf.log = make([]*LogEntry, 0)
 
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
