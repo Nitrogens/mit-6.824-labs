@@ -224,6 +224,23 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		rf.votedFor = args.CandidateId
 		reply.VoteGranted = true
 	}
+	isUpToDate := false
+	if args.LastLogTerm == rf.log[len(rf.log)-1].term {
+		if args.LastLogIndex >= len(rf.log)-1 {
+			isUpToDate = true
+		} else {
+			isUpToDate = false
+		}
+	} else {
+		if args.LastLogTerm > rf.log[len(rf.log)-1].term {
+			isUpToDate = true
+		} else {
+			isUpToDate = false
+		}
+	}
+	if !isUpToDate {
+		reply.VoteGranted = false
+	}
 	reply.Term = rf.currentTerm
 }
 
