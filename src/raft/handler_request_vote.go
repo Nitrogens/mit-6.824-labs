@@ -30,30 +30,30 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	// Your code here (2A, 2B).
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
-	if args.Term < rf.currentTerm {
+	if args.Term < rf.CurrentTerm {
 		reply.VoteGranted = false
-	} else if args.Term == rf.currentTerm {
+	} else if args.Term == rf.CurrentTerm {
 		// check whether the current server has voted to other candidates
-		if rf.votedFor == -1 {
-			rf.votedFor = args.CandidateId
+		if rf.VotedFor == -1 {
+			rf.VotedFor = args.CandidateId
 			reply.VoteGranted = true
 		} else {
 			reply.VoteGranted = false
 		}
 	} else {
 		rf.getIntoNewTerm(args.Term)
-		rf.votedFor = args.CandidateId
+		rf.VotedFor = args.CandidateId
 		reply.VoteGranted = true
 	}
 	isUpToDate := false
-	if args.LastLogTerm == rf.log[len(rf.log)-1].Term {
-		if args.LastLogIndex >= len(rf.log)-1 {
+	if args.LastLogTerm == rf.Log[len(rf.Log)-1].Term {
+		if args.LastLogIndex >= len(rf.Log)-1 {
 			isUpToDate = true
 		} else {
 			isUpToDate = false
 		}
 	} else {
-		if args.LastLogTerm > rf.log[len(rf.log)-1].Term {
+		if args.LastLogTerm > rf.Log[len(rf.Log)-1].Term {
 			isUpToDate = true
 		} else {
 			isUpToDate = false
@@ -62,7 +62,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	if !isUpToDate {
 		reply.VoteGranted = false
 	}
-	reply.Term = rf.currentTerm
+	reply.Term = rf.CurrentTerm
 	if reply.VoteGranted {
 		rf.timeReset()
 	}

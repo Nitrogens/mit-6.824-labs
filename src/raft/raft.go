@@ -81,9 +81,9 @@ type Raft struct {
 	// state a Raft server must maintain.
 
 	// Persistent state on all servers
-	currentTerm int
-	votedFor    int
-	log         []LogEntry
+	CurrentTerm int
+	VotedFor    int
+	Log         []LogEntry
 	votesCount  int
 	timeLimit   time.Duration
 	startTime   time.Time
@@ -113,7 +113,7 @@ func (rf *Raft) GetState() (int, bool) {
 	// Your code here (2A).
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
-	term = rf.currentTerm
+	term = rf.CurrentTerm
 	isLeader = string(rf.persister.ReadRaftState()) == kServerStateLeader
 
 	return term, isLeader
@@ -159,9 +159,9 @@ func (rf *Raft) readPersist(data []byte) {
 
 // TODO: MUST lock the mutex before calling!!
 func (rf *Raft) getIntoNewTerm(termId int) {
-	rf.currentTerm = termId
+	rf.CurrentTerm = termId
 	rf.votesCount = 0
-	rf.votedFor = -1
+	rf.VotedFor = -1
 	rf.persister.SaveRaftState([]byte(kServerStateFollower))
 }
 
@@ -174,7 +174,7 @@ func (rf *Raft) timeReset() {
 func (rf *Raft) applyLogEntry(logId int) {
 	applyMsg := ApplyMsg{
 		CommandValid: true,
-		Command:      rf.log[logId].Command,
+		Command:      rf.Log[logId].Command,
 		CommandIndex: logId,
 	}
 	rf.applyCh <- applyMsg
@@ -223,8 +223,8 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	// Your initialization code here (2A, 2B, 2C).
 
 	// For Lab 2A
-	rf.currentTerm = 0
-	rf.votedFor = -1
+	rf.CurrentTerm = 0
+	rf.VotedFor = -1
 	rf.persister.SaveRaftState([]byte(kServerStateFollower))
 	rf.timeReset()
 	rf.doneChan = make(chan bool, 1)
@@ -239,7 +239,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 		rf.nextIndex[i] = 1
 		rf.matchIndex[i] = 0
 	}
-	rf.log = make([]LogEntry, 1)
+	rf.Log = make([]LogEntry, 1)
 	rf.acceptedCount = make([]int, 1)
 	rf.acceptedCount[0] = 3
 	rf.applyCond = sync.NewCond(&sync.Mutex{})

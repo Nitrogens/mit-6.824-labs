@@ -18,11 +18,11 @@ func (rf *Raft) TimeoutChecker() {
 				// Restart the election
 				rf.timeReset()
 				//_, _ = DPrintf("%v: Timeout\n", rf.me)
-				rf.getIntoNewTerm(rf.currentTerm + 1)
+				rf.getIntoNewTerm(rf.CurrentTerm + 1)
 				rf.persister.SaveRaftState([]byte(kServerStateCandidate))
 				// vote for itself
 				rf.votesCount = 1
-				rf.votedFor = rf.me
+				rf.VotedFor = rf.me
 				for idx := range rf.peers {
 					if idx == rf.me {
 						continue
@@ -33,15 +33,15 @@ func (rf *Raft) TimeoutChecker() {
 						//_, _ = DPrintf("%v: Try to send RequestVote %v\n", rf.me, id)
 
 						for {
-							if rf.currentTerm > termId {
+							if rf.CurrentTerm > termId {
 								return
 							}
 							//fmt.Printf("%v: LastLogIndex: %+v\n", rf.me, len(rf.log) - 1)
 							args := &RequestVoteArgs{
-								Term:         rf.currentTerm,
+								Term:         rf.CurrentTerm,
 								CandidateId:  rf.me,
-								LastLogIndex: len(rf.log) - 1,
-								LastLogTerm:  rf.log[len(rf.log)-1].Term,
+								LastLogIndex: len(rf.Log) - 1,
+								LastLogTerm:  rf.Log[len(rf.Log)-1].Term,
 							}
 							reply := &RequestVoteReply{}
 							rf.mu.Unlock()
@@ -56,10 +56,10 @@ func (rf *Raft) TimeoutChecker() {
 							}
 
 							rf.mu.Lock()
-							if rf.currentTerm > termId {
+							if rf.CurrentTerm > termId {
 								return
 							}
-							if reply.Term > rf.currentTerm {
+							if reply.Term > rf.CurrentTerm {
 								rf.getIntoNewTerm(reply.Term)
 								return
 							}
@@ -68,7 +68,7 @@ func (rf *Raft) TimeoutChecker() {
 							}
 							break
 						}
-					}(idx, rf.currentTerm)
+					}(idx, rf.CurrentTerm)
 				}
 			}
 			rf.mu.Unlock()
@@ -92,7 +92,7 @@ func (rf *Raft) Work() {
 				if rf.votesCount > len(rf.peers)/2 {
 					rf.persister.SaveRaftState([]byte(kServerStateLeader))
 					for idx := range rf.peers {
-						rf.nextIndex[idx] = len(rf.log)
+						rf.nextIndex[idx] = len(rf.Log)
 						rf.matchIndex[idx] = 0
 					}
 					for idx := range rf.acceptedCount {
@@ -110,21 +110,21 @@ func (rf *Raft) Work() {
 						defer rf.mu.Unlock()
 						_, _ = DPrintf("[Id: %+v][State: %+v] Try to send AppendEntries %v", rf.me, string(rf.persister.raftstate), id)
 						for {
-							if rf.currentTerm > termId {
+							if rf.CurrentTerm > termId {
 								break
 							}
 							//fmt.Printf("%v: LastLogIndex: %+v\n", rf.me, len(rf.log) - 1)
 							args := &AppendEntriesArgs{
-								Term:         rf.currentTerm,
+								Term:         rf.CurrentTerm,
 								LeaderId:     rf.me,
 								LeaderCommit: rf.commitIndex,
 								PrevLogIndex: rf.nextIndex[id] - 1,
-								PrevLogTerm:  rf.log[rf.nextIndex[id]-1].Term,
+								PrevLogTerm:  rf.Log[rf.nextIndex[id]-1].Term,
 								Entries:      make([]LogEntry, 0),
 							}
-							if rf.nextIndex[id] < len(rf.log) {
-								args.Entries = make([]LogEntry, len(rf.log[rf.nextIndex[id]:]))
-								copy(args.Entries, rf.log[rf.nextIndex[id]:])
+							if rf.nextIndex[id] < len(rf.Log) {
+								args.Entries = make([]LogEntry, len(rf.Log[rf.nextIndex[id]:]))
+								copy(args.Entries, rf.Log[rf.nextIndex[id]:])
 							}
 							reply := &AppendEntriesReply{
 								Replied: false,
@@ -143,10 +143,10 @@ func (rf *Raft) Work() {
 							}
 
 							rf.mu.Lock()
-							if rf.currentTerm > termId {
+							if rf.CurrentTerm > termId {
 								break
 							}
-							if reply.Term > rf.currentTerm {
+							if reply.Term > rf.CurrentTerm {
 								_, _ = DPrintf("[Id: %+v][State: %+v] Try to send AppendEntries Failed! [%+v] | [%+v]", rf.me, string(rf.persister.raftstate), args, reply)
 								rf.getIntoNewTerm(reply.Term)
 								return
@@ -185,7 +185,7 @@ func (rf *Raft) Work() {
 								break
 							}
 						}
-					}(idx, rf.currentTerm)
+					}(idx, rf.CurrentTerm)
 				}
 				rf.mu.Unlock()
 				time.Sleep(kPeriodForNextHeartbeat)
@@ -219,7 +219,7 @@ func (rf *Raft) ApplyWork() {
 			}
 			var command interface{}
 			if logId > -1 {
-				command = rf.log[logId].Command
+				command = rf.Log[logId].Command
 			}
 			applyCh := rf.applyCh
 			rf.mu.Unlock()	// unlock now to avoid the block of the channel
