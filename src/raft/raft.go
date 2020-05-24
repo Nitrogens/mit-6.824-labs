@@ -18,6 +18,7 @@ package raft
 //
 
 import (
+	"bytes"
 	"log"
 	"math/rand"
 	"net/http"
@@ -26,6 +27,7 @@ import (
 )
 import "sync/atomic"
 import "../labrpc"
+import "../labgob"
 import _ "net/http/pprof"
 
 // import "bytes"
@@ -120,6 +122,12 @@ func (rf *Raft) GetState() (int, bool) {
 	return term, isLeader
 }
 
+type PersistentState struct {
+	CurrentTerm int
+	VotedFor    int
+	Log         []LogEntry
+}
+
 //
 // save Raft's persistent state to stable storage,
 // where it can later be retrieved after a crash and restart.
@@ -127,13 +135,18 @@ func (rf *Raft) GetState() (int, bool) {
 //
 func (rf *Raft) persist() {
 	// Your code here (2C).
-	// Example:
-	// w := new(bytes.Buffer)
-	// e := labgob.NewEncoder(w)
-	// e.Encode(rf.xxx)
-	// e.Encode(rf.yyy)
-	// data := w.Bytes()
-	// rf.persister.SaveRaftState(data)
+	//rf.mu.Lock()
+	//defer rf.mu.Unlock()
+	state := PersistentState{
+		CurrentTerm: rf.CurrentTerm,
+		VotedFor: rf.VotedFor,
+		Log: rf.Log,
+	}
+	w := new(bytes.Buffer)
+	e := labgob.NewEncoder(w)
+	_ = e.Encode(state)
+	data := w.Bytes()
+	rf.persister.SaveRaftState(data)
 }
 
 //
@@ -144,18 +157,19 @@ func (rf *Raft) readPersist(data []byte) {
 		return
 	}
 	// Your code here (2C).
-	// Example:
-	// r := bytes.NewBuffer(data)
-	// d := labgob.NewDecoder(r)
-	// var xxx
-	// var yyy
-	// if d.Decode(&xxx) != nil ||
-	//    d.Decode(&yyy) != nil {
-	//   error...
-	// } else {
-	//   rf.xxx = xxx
-	//   rf.yyy = yyy
-	// }
+	r := bytes.NewBuffer(data)
+	d := labgob.NewDecoder(r)
+	state := PersistentState{}
+	if err := d.Decode(&state); err != nil {
+		log.Fatal("[readPersist] Decoding error!!", err, rf)
+	} else {
+		rf.mu.Lock()
+		rf.CurrentTerm = state.CurrentTerm
+		rf.VotedFor = state.VotedFor
+		rf.Log = state.Log
+		rf.persist()
+		rf.mu.Unlock()
+	}
 }
 
 // TODO: MUST lock the mutex before calling!!
@@ -164,6 +178,7 @@ func (rf *Raft) getIntoNewTerm(termId int) {
 	rf.votesCount = 0
 	rf.VotedFor = -1
 	rf.state = kServerStateFollower
+	rf.persist()
 }
 
 // TODO: MUST lock the mutex before calling!!

@@ -68,6 +68,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	if minIdx < 0x3f3f3f3f {
 		rf.Log = rf.Log[:minIdx]
 		rf.acceptedCount = rf.acceptedCount[:minIdx]
+		rf.persist()
 	}
 	sort.Slice(args.Entries, func(i, j int) bool {
 		return args.Entries[i].Idx < args.Entries[i].Idx
@@ -77,6 +78,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 			rf.Log = append(rf.Log, logEntry)
 			rf.acceptedCount = append(rf.acceptedCount, 1)
 			reply.AcceptedIndexes = append(reply.AcceptedIndexes, logEntry.Idx)
+			rf.persist()
 		}
 	}
 	if args.LeaderCommit > rf.commitIndex && len(rf.Log)-1 >= args.LeaderCommit {

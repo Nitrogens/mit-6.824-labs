@@ -36,6 +36,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		// check whether the current server has voted to other candidates
 		if rf.VotedFor == -1 {
 			rf.VotedFor = args.CandidateId
+			rf.persist()
 			reply.VoteGranted = true
 		} else {
 			reply.VoteGranted = false
@@ -43,6 +44,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	} else {
 		rf.getIntoNewTerm(args.Term)
 		rf.VotedFor = args.CandidateId
+		rf.persist()
 		reply.VoteGranted = true
 	}
 	isUpToDate := false

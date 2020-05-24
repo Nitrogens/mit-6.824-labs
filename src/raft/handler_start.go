@@ -35,6 +35,7 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	index = len(rf.Log)
 	rf.Log = append(rf.Log, newLogEntry)
 	rf.acceptedCount = append(rf.acceptedCount, 1)
+	rf.persist()
 
 	if rf.dead == 1 {
 		return -1, rf.CurrentTerm, false
