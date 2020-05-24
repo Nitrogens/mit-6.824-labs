@@ -13,13 +13,13 @@ func (rf *Raft) TimeoutChecker() {
 			return
 		default:
 			//_, _ = DPrintf("%v: TimeoutChecker\n", rf.me)
-			if string(rf.persister.ReadRaftState()) != kServerStateLeader && time.Since(rf.startTime) >= rf.timeLimit {
+			if rf.state != kServerStateLeader && time.Since(rf.startTime) >= rf.timeLimit {
 				// Timeout!
 				// Restart the election
 				rf.timeReset()
 				//_, _ = DPrintf("%v: Timeout\n", rf.me)
 				rf.getIntoNewTerm(rf.CurrentTerm + 1)
-				rf.persister.SaveRaftState([]byte(kServerStateCandidate))
+				rf.state = kServerStateCandidate
 				// vote for itself
 				rf.votesCount = 1
 				rf.VotedFor = rf.me
@@ -80,17 +80,17 @@ func (rf *Raft) TimeoutChecker() {
 func (rf *Raft) Work() {
 	for {
 		rf.mu.Lock()
-		_, _ = DPrintf("[Id: %+v][State: %+v] %+v", rf.me, string(rf.persister.raftstate), rf)
+		_, _ = DPrintf("[Id: %+v][State: %+v] %+v", rf.me, rf.state, rf)
 		select {
 		case <-rf.doneChan:
 			// Return immediately if this goroutine has been killed
 			rf.mu.Unlock()
 			return
 		default:
-			switch string(rf.persister.ReadRaftState()) {
+			switch rf.state {
 			case kServerStateCandidate:
 				if rf.votesCount > len(rf.peers)/2 {
-					rf.persister.SaveRaftState([]byte(kServerStateLeader))
+					rf.state = kServerStateLeader
 					for idx := range rf.peers {
 						rf.nextIndex[idx] = len(rf.Log)
 						rf.matchIndex[idx] = 0
@@ -108,7 +108,7 @@ func (rf *Raft) Work() {
 					go func(id, termId int) {
 						rf.mu.Lock()
 						defer rf.mu.Unlock()
-						_, _ = DPrintf("[Id: %+v][State: %+v] Try to send AppendEntries %v", rf.me, string(rf.persister.raftstate), id)
+						_, _ = DPrintf("[Id: %+v][State: %+v] Try to send AppendEntries %v", rf.me, rf.state, id)
 						for {
 							if rf.CurrentTerm > termId {
 								break
@@ -136,7 +136,7 @@ func (rf *Raft) Work() {
 
 							// if get no response from the remote server, retry to send requests
 							if !ok {
-								_, _ = DPrintf("[Id: %+v][State: %+v] Try to send AppendEntries Failed! [%+v] | [%+v]", rf.me, string(rf.persister.raftstate), args, reply)
+								_, _ = DPrintf("[Id: %+v][State: %+v] Try to send AppendEntries Failed! [%+v] | [%+v]", rf.me, rf.state, args, reply)
 								time.Sleep(kPeriodForNextHeartbeat) // Sleep and retry
 								rf.mu.Lock()
 								continue
@@ -147,13 +147,13 @@ func (rf *Raft) Work() {
 								break
 							}
 							if reply.Term > rf.CurrentTerm {
-								_, _ = DPrintf("[Id: %+v][State: %+v] Try to send AppendEntries Failed! [%+v] | [%+v]", rf.me, string(rf.persister.raftstate), args, reply)
+								_, _ = DPrintf("[Id: %+v][State: %+v] Try to send AppendEntries Failed! [%+v] | [%+v]", rf.me, rf.state, args, reply)
 								rf.getIntoNewTerm(reply.Term)
 								return
 								// rf.timeReset()
 							}
 							if reply.Success == false {
-								_, _ = DPrintf("[Id: %+v][State: %+v] Try to send AppendEntries Failed! [%+v] | [%+v]", rf.me, string(rf.persister.raftstate), args, reply)
+								_, _ = DPrintf("[Id: %+v][State: %+v] Try to send AppendEntries Failed! [%+v] | [%+v]", rf.me, rf.state, args, reply)
 								if reply.StatusCode == kAppendEntriesStatusLogInconsistency {
 									if rf.nextIndex[id] > 1 {
 										rf.nextIndex[id]--
@@ -166,7 +166,7 @@ func (rf *Raft) Work() {
 									break
 								}
 							} else {
-								_, _ = DPrintf("[Id: %+v][State: %+v] Try to send AppendEntries successful! [%+v] | [%+v]", rf.me, string(rf.persister.raftstate), args, reply)
+								_, _ = DPrintf("[Id: %+v][State: %+v] Try to send AppendEntries successful! [%+v] | [%+v]", rf.me, rf.state, args, reply)
 								if len(args.Entries) > 0 {
 									rf.matchIndex[id] = args.PrevLogIndex + len(args.Entries)
 									rf.nextIndex[id] = rf.matchIndex[id] + 1

@@ -84,6 +84,7 @@ type Raft struct {
 	CurrentTerm int
 	VotedFor    int
 	Log         []LogEntry
+	state       string
 	votesCount  int
 	timeLimit   time.Duration
 	startTime   time.Time
@@ -114,7 +115,7 @@ func (rf *Raft) GetState() (int, bool) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 	term = rf.CurrentTerm
-	isLeader = string(rf.persister.ReadRaftState()) == kServerStateLeader
+	isLeader = rf.state == kServerStateLeader
 
 	return term, isLeader
 }
@@ -162,7 +163,7 @@ func (rf *Raft) getIntoNewTerm(termId int) {
 	rf.CurrentTerm = termId
 	rf.votesCount = 0
 	rf.VotedFor = -1
-	rf.persister.SaveRaftState([]byte(kServerStateFollower))
+	rf.state = kServerStateFollower
 }
 
 // TODO: MUST lock the mutex before calling!!
@@ -225,7 +226,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	// For Lab 2A
 	rf.CurrentTerm = 0
 	rf.VotedFor = -1
-	rf.persister.SaveRaftState([]byte(kServerStateFollower))
+	rf.state = kServerStateFollower
 	rf.timeReset()
 	rf.doneChan = make(chan bool, 1)
 	rf.applyCh = applyCh

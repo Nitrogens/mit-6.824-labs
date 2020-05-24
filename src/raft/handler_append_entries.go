@@ -27,7 +27,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		rf.mu.Unlock()
 	}()
 	reply.AcceptedIndexes = make([]int, 0)
-	DPrintf("[Id: %+v][State: %+v] AppendEntries received!! %+v", rf.me, string(rf.persister.ReadRaftState()), *args)
+	DPrintf("[Id: %+v][State: %+v] AppendEntries received!! %+v", rf.me, rf.state, *args)
 	if args.Term < rf.CurrentTerm {
 		// The leader is out-of-date
 		reply.Success = false
@@ -38,7 +38,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	if args.Term > rf.CurrentTerm {
 		rf.getIntoNewTerm(args.Term)
 	} else {
-		rf.persister.SaveRaftState([]byte(kServerStateFollower))
+		rf.state = kServerStateFollower
 	}
 	if args.PrevLogIndex < len(rf.Log) {
 		if rf.Log[args.PrevLogIndex].Term != args.PrevLogTerm {

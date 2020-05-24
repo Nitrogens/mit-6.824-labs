@@ -22,11 +22,11 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	defer rf.mu.Unlock()
 
 	// Redirect to the leader if the current peer is not a leader
-	if rf.dead == 1 || string(rf.persister.raftstate) != kServerStateLeader {
+	if rf.dead == 1 || rf.state != kServerStateLeader {
 		return index, rf.CurrentTerm, false
 	}
 
-	DPrintf("[Id: %+v][State: %+v] Start: %+v\n", rf.me, string(rf.persister.raftstate), rf)
+	DPrintf("[Id: %+v][State: %+v] Start: %+v\n", rf.me, rf.state, rf)
 	newLogEntry := LogEntry{
 		Idx:     len(rf.Log),
 		Term:    rf.CurrentTerm,
@@ -40,7 +40,7 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 		return -1, rf.CurrentTerm, false
 	}
 
-	DPrintf("Start() RETURNED!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!, %+v, %+v, %+v\n", index, rf.CurrentTerm, string(rf.persister.raftstate) == kServerStateLeader)
+	DPrintf("Start() RETURNED!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!, %+v, %+v, %+v\n", index, rf.CurrentTerm, rf.state == kServerStateLeader)
 
-	return index, rf.CurrentTerm, string(rf.persister.raftstate) == kServerStateLeader
+	return index, rf.CurrentTerm, rf.state == kServerStateLeader
 }
