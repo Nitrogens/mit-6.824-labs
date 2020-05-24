@@ -12,7 +12,7 @@ const (
 	kElectionMinimalTimeLimit = 200
 	kElectionMaximalTimeLimit = 499
 	kPeriodForNextHeartbeat   = 100 * time.Millisecond
-	kRPCWaitTime              = 50 * time.Millisecond
+	kRPCWaitTime              = 25 * time.Millisecond
 )
 
 const (

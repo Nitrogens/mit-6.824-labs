@@ -17,6 +17,9 @@ type AppendEntriesReply struct {
 	Replied         bool
 	StatusCode      int
 	AcceptedIndexes []int
+	XTerm           int
+	XIndex          int
+	XLen            int
 }
 
 func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
@@ -44,11 +47,17 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		if rf.Log[args.PrevLogIndex].Term != args.PrevLogTerm {
 			reply.Success = false
 			reply.StatusCode = kAppendEntriesStatusLogInconsistency
+			reply.XTerm = rf.Log[args.PrevLogIndex].Term
+			reply.XIndex = LowerBound(rf.Log, rf.Log[args.PrevLogIndex].Term)
+			reply.XLen = len(rf.Log)
 			return
 		}
 	} else {
 		reply.Success = false
 		reply.StatusCode = kAppendEntriesStatusLogInconsistency
+		reply.XTerm = -1
+		reply.XIndex = -1
+		reply.XLen = len(rf.Log)
 		return
 	}
 	reply.Success = true

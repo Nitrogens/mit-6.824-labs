@@ -42,7 +42,7 @@ func init() {
 
 func getRandomTimeDuration() time.Duration {
 	timeLen := int64(rand.Intn(kElectionMaximalTimeLimit-kElectionMinimalTimeLimit+1) + kElectionMinimalTimeLimit)
-	return time.Duration(timeLen * int64(time.Millisecond)/int64(50*time.Millisecond)*int64(50*time.Millisecond))
+	return time.Duration(timeLen * int64(time.Millisecond) / int64(50*time.Millisecond) * int64(50*time.Millisecond))
 }
 
 //
@@ -94,7 +94,7 @@ type Raft struct {
 	applyCond   *sync.Cond
 
 	// Channels
-	doneChan    chan bool
+	doneChan chan bool
 	// timeoutChan <-chan time.Time
 
 	// Volatile state on all servers
@@ -123,9 +123,10 @@ func (rf *Raft) GetState() (int, bool) {
 }
 
 type PersistentState struct {
-	CurrentTerm int
-	VotedFor    int
-	Log         []LogEntry
+	CurrentTerm   int
+	VotedFor      int
+	Log           []LogEntry
+	AcceptedCount []int
 }
 
 //
@@ -139,9 +140,12 @@ func (rf *Raft) persist() {
 	//defer rf.mu.Unlock()
 	state := PersistentState{
 		CurrentTerm: rf.CurrentTerm,
-		VotedFor: rf.VotedFor,
-		Log: rf.Log,
+		VotedFor:    rf.VotedFor,
 	}
+	state.Log = make([]LogEntry, len(rf.Log))
+	copy(state.Log, rf.Log)
+	state.AcceptedCount = make([]int, len(rf.acceptedCount))
+	copy(state.AcceptedCount, rf.acceptedCount)
 	w := new(bytes.Buffer)
 	e := labgob.NewEncoder(w)
 	_ = e.Encode(state)
@@ -166,7 +170,10 @@ func (rf *Raft) readPersist(data []byte) {
 		rf.mu.Lock()
 		rf.CurrentTerm = state.CurrentTerm
 		rf.VotedFor = state.VotedFor
-		rf.Log = state.Log
+		rf.Log = make([]LogEntry, len(state.Log))
+		copy(rf.Log, state.Log)
+		rf.acceptedCount = make([]int, len(state.AcceptedCount))
+		copy(rf.acceptedCount, state.AcceptedCount)
 		rf.persist()
 		rf.mu.Unlock()
 	}

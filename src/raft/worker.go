@@ -110,7 +110,7 @@ func (rf *Raft) Work() {
 						defer rf.mu.Unlock()
 						_, _ = DPrintf("[Id: %+v][State: %+v] Try to send AppendEntries %v", rf.me, rf.state, id)
 						for {
-							if rf.CurrentTerm > termId {
+							if rf.state != kServerStateLeader || rf.CurrentTerm > termId {
 								break
 							}
 							//fmt.Printf("%v: LastLogIndex: %+v\n", rf.me, len(rf.log) - 1)
@@ -143,7 +143,7 @@ func (rf *Raft) Work() {
 							}
 
 							rf.mu.Lock()
-							if rf.CurrentTerm > termId {
+							if rf.state != kServerStateLeader || rf.CurrentTerm > termId {
 								break
 							}
 							if reply.Term > rf.CurrentTerm {
@@ -155,9 +155,19 @@ func (rf *Raft) Work() {
 							if reply.Success == false {
 								_, _ = DPrintf("[Id: %+v][State: %+v] Try to send AppendEntries Failed! [%+v] | [%+v]", rf.me, rf.state, args, reply)
 								if reply.StatusCode == kAppendEntriesStatusLogInconsistency {
-									if rf.nextIndex[id] > 1 {
-										rf.nextIndex[id]--
+									if reply.XTerm == -1 {
+										rf.nextIndex[id] = reply.XLen
+									} else {
+										pos := UpperBound(rf.Log, reply.XTerm) - 1
+										if rf.Log[pos].Term != reply.XTerm {
+											rf.nextIndex[id] = reply.XIndex
+										} else {
+											rf.nextIndex[id] = pos
+										}
 									}
+									//if rf.nextIndex[id] > 1 {
+									//	rf.nextIndex[id]--
+									//}
 									rf.mu.Unlock()
 									time.Sleep(kRPCWaitTime) // Sleep and retry
 									rf.mu.Lock()
@@ -201,18 +211,19 @@ func (rf *Raft) Work() {
 func (rf *Raft) ApplyWork() {
 	//rf.applyCond.L.Lock()
 	//defer rf.applyCond.L.Unlock()
+	doneChan := rf.doneChan
+	applyCh := rf.applyCh
 	for {
 		//rf.applyCond.Wait()
-		rf.mu.Lock()
 		select {
-		case <-rf.doneChan:
+		case <-doneChan:
 			// Return immediately if this goroutine has been killed
 			//_, _ = DPrintf("%v: Returned\n", rf.me)
-			rf.mu.Unlock()
 			return
 		default:
 			//_, _ = DPrintf("%v: ApplyWork\n", rf.me)
 			logId := -1
+			rf.mu.Lock()
 			if rf.lastApplied < rf.commitIndex {
 				rf.lastApplied++
 				logId = rf.lastApplied
@@ -221,7 +232,6 @@ func (rf *Raft) ApplyWork() {
 			if logId > -1 {
 				command = rf.Log[logId].Command
 			}
-			applyCh := rf.applyCh
 			rf.mu.Unlock()	// unlock now to avoid the block of the channel
 			if logId > -1 {
 				applyMsg := ApplyMsg{
